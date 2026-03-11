@@ -1,17 +1,32 @@
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
 .venv/
 venv/
 ENV/
+build/
+dist/
+*.egg-info/
 
-# Configuration
-.env
-
-# Database
-# Si vas a subir la DB a Fly.io, comenta la siguiente linea o usa 'git add -f transporte.db'
+# --- Datos & Base de Datos ---
+# La DB se genera con build_db.py en el servidor o localmente.
 transporte.db
+*.sqlite3
+*.db
 
-# OS
+# --- Configuración & Secretos ---
+.env
+.env.*
+!.env.example
+
+# --- Logs ---
+*.log
+
+# --- OS ---
 .DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
