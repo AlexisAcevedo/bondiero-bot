@@ -1,0 +1,14 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+transporte.db
+Dockerfile
+fly.toml
+README.md
+test_*.py
+debug_*.py
+.agent/
