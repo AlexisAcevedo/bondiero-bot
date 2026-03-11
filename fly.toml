@@ -1,0 +1,17 @@
+# fly.toml app configuration file
+# Use 'fly launch' to set up your app
+
+app = "bondiero-bot" # El nombre de tu app en Fly
+primary_region = "gru" # Sao Paulo, la más cercana a Buenos Aires
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # No pongas secretos acá. Usá 'fly secrets set' para tokens.
+  DB_NAME = "transporte.db"
+
+[[vm]]
+  memory = "512mb" # 512MB es suficiente para procesar el GTFS de CABA
+  cpu_kind = "shared"
+  cpus = 1
