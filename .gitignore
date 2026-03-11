@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Configuration
+.env
+
+# Database
+# Si vas a subir la DB a Fly.io, comenta la siguiente linea o usa 'git add -f transporte.db'
+transporte.db
+
+# OS
+.DS_Store
