@@ -30,3 +30,6 @@ transporte.db
 ._*
 Thumbs.db
 Desktop.ini
+
+# --- Agent ---
+.agent/
