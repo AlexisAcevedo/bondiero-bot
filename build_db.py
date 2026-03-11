@@ -28,7 +28,6 @@ def download_gtfs():
     print("Descarga completa.")
 
 def get_csv_reader(zf, filename):
-    # Función auxiliar para abrir un CSV dentro del ZIP de forma eficiente
     f = zf.open(filename)
     return csv.DictReader(io.TextIOWrapper(f, encoding='utf-8'))
 
@@ -41,10 +40,10 @@ def build_database():
     cursor = conn.cursor()
     cursor.execute("PRAGMA journal_mode = OFF")
     cursor.execute("PRAGMA synchronous = OFF")
-    cursor.execute("PRAGMA cache_size = -2000") # Limitar cache a 2MB
+    cursor.execute("PRAGMA cache_size = -2000") 
 
     with zipfile.ZipFile(ZIP_FILE) as zf:
-        # 1. Rutas: Solo colectivos (route_type 3)
+        # 1. Rutas
         print("Procesando routes.txt...")
         cursor.execute("DROP TABLE IF EXISTS routes")
         cursor.execute("CREATE TABLE routes (route_id TEXT, route_short_name TEXT, route_long_name TEXT)")
@@ -52,29 +51,33 @@ def build_database():
         valid_route_ids = set()
         reader = get_csv_reader(zf, "routes.txt")
         for row in reader:
-            # En CABA, route_type 3 es Colectivo
             if row.get('route_type') == '3' or 'route_type' not in row:
                 cursor.execute("INSERT INTO routes VALUES (?, ?, ?)", 
                                (row['route_id'], row['route_short_name'], row.get('route_long_name', '')))
                 valid_route_ids.add(row['route_id'])
         
-        # 2. Trips: Solo de las rutas válidas
-        print("Procesando trips.txt...")
+        # 2. Trips: Solo de las rutas válidas y un solo viaje representativo por (route, direction)
+        # para que la DB no pese gigas.
+        print("Procesando trips.txt (viajes únicos)...")
         cursor.execute("DROP TABLE IF EXISTS trips")
         cursor.execute("CREATE TABLE trips (route_id TEXT, trip_id TEXT, direction_id INTEGER, trip_headsign TEXT)")
         
         valid_trip_ids = set()
+        vistos = set() # (route_id, direction_id)
         reader = get_csv_reader(zf, "trips.txt")
         for row in reader:
-            if row['route_id'] in valid_route_ids:
+            rid = row['route_id']
+            did = row['direction_id']
+            if rid in valid_route_ids and (rid, did) not in vistos:
                 cursor.execute("INSERT INTO trips VALUES (?, ?, ?, ?)", 
-                               (row['route_id'], row['trip_id'], int(row['direction_id']), row.get('trip_headsign', '')))
+                               (rid, row['trip_id'], int(did), row.get('trip_headsign', '')))
                 valid_trip_ids.add(row['trip_id'])
+                vistos.add((rid, did))
         
-        del valid_route_ids
+        del vistos
         gc.collect()
 
-        # 3. Stop Times: GIGANTE, procesamiento por lotes
+        # 3. Stop Times
         print("Procesando stop_times.txt (Streaming)...")
         cursor.execute("DROP TABLE IF EXISTS stop_times")
         cursor.execute("CREATE TABLE stop_times (trip_id TEXT, stop_id TEXT, stop_sequence INTEGER)")
@@ -105,19 +108,21 @@ def build_database():
 
     print("Creando índices...")
     cursor.execute("CREATE INDEX idx_routes_name ON routes(route_short_name)")
-    cursor.execute("CREATE INDEX idx_stop_times_trip ON stop_times(trip_id)")
     cursor.execute("CREATE INDEX idx_stop_times_stop ON stop_times(stop_id)")
     cursor.execute("CREATE INDEX idx_trips_route ON trips(route_id)")
     
-    print("Compactando (VACUUM)...")
-    conn.execute("VACUUM")
     conn.commit()
     conn.close()
+
+    # VACUUM seguro fuera de transaccion
+    print("Compactando base de datos (VACUUM)...")
+    conn_v = sqlite3.connect(DB_NAME, isolation_level=None)
+    conn_v.execute("VACUUM")
+    conn_v.close()
     
-    # Limpiar el ZIP para liberar espacio en disco
     if os.path.exists(ZIP_FILE):
         os.remove(ZIP_FILE)
-    print("¡Base de datos optimizada con éxito!")
+    print("¡Base de datos ultra-optimizada generada!")
 
 if __name__ == "__main__":
     if not CLIENT_ID or not CLIENT_SECRET:

@@ -1,61 +1,52 @@
 # 🚌 Bondiero Bot
 
-Un bot de Telegram asíncrono diseñado para informar en tiempo real cuánto tiempo falta para que llegue el próximo colectivo en la Ciudad Autónoma de Buenos Aires (CABA). Utiliza datos oficiales de GTFS-Realtime y cálculos de ruta precisos.
+Un bot de Telegram asíncrono diseñado para informar en tiempo real cuánto tiempo falta para que llegue el próximo colectivo en la Ciudad Autónoma de Buenos Aires (CABA). Optimizado para despliegue eficiente en entornos de bajos recursos (como el plan gratuito de Fly.io).
 
 ## 🚀 Inicio Rápido
 
 ### Requisitos Previos
-- Python 3.10+
+- Python 3.11+
 - Tokens de la [API de Transporte de CABA](https://www.buenosaires.gob.ar/desarrollourbano/transporte/api-de-transporte) (Client ID y Client Secret).
-- Un Token de Bot de Telegram (creado vía @BotFather).
+- Un Token de Bot de Telegram (vía @BotFather).
 
-### Instalación
+### Instalación Local
 1. Clonar el repositorio.
 2. Crear un entorno virtual: `python -m venv venv`.
-3. Activar el entorno: `source venv/bin/activate` (Linux/macOS) o `venv\Scripts\activate` (Windows).
-4. Instalar dependencias: `pip install -r requirements.txt`.
-5. Configurar el archivo `.env` (ver sección de Configuración).
+3. Activar el entorno e instalar dependencias: `pip install -r requirements.txt`.
+4. Configurar el archivo `.env`.
 
 ### Inicialización de Datos
-Antes de correr el bot por primera vez, debes generar la base de datos local con los datos estáticos de CABA:
+El bot requiere una base de datos SQLite con las paradas y rutas de CABA. Se genera automáticamente:
 ```bash
 python build_db.py
 ```
 
-### Ejecución
-```bash
-python bot.py
-```
-
-## ✨ Características
-- **Consultas por Línea:** `/132` para buscar paradas cercanas.
-- **Búsqueda Directa:** `/132 rivadavia 4296` para obtener tiempos en una dirección específica.
-- **Ubicación GPS:** Soporte nativo para compartir ubicación desde Telegram.
-- **Tiempo Real:** Conexión con el feed GTFS-RT de CABA.
-- **Cálculo de ETA:** Integración con OSRM para estimar minutos de llegada según el tráfico y recorrido.
-- **Doble Sentido:** Muestra arribos para ambos sentidos de la línea (Ida y Vuelta).
+## ✨ Características y Optimizaciones
+- **Eficiencia de Memoria:** Procesamiento de GTFS mediante *streaming* (csv nativo) para funcionar en servidores con solo 512MB de RAM.
+- **Base de Datos Ultra-Slim:** Reducción de la base de datos de 2GB a ~5MB mediante la selección de viajes representativos, sin pérdida de funcionalidad de paradas.
+- **Geolocalización Robusta:** Integración con Nominatim (OpenStreetMap) configurada para evitar bloqueos en servidores de producción.
+- **Cálculo de ETA Inteligente:** Intenta calcular la ruta real vía OSRM y cuenta con un *fallback* automático por distancia lineal (18 km/h) si el servicio externo falla.
+- **Tiempo Real:** Conexión directa con el feed Protobuf de GTFS-Realtime de CABA.
 
 ## ⚙️ Configuración
 
-Crea un archivo `.env` basado en `.env.example`:
+Crea un archivo `.env` con las siguientes variables:
+- `TELEGRAM_TOKEN`: Token de Telegram.
+- `CABA_API_CLIENT_ID`: ID de cliente de la API de CABA.
+- `CABA_API_CLIENT_SECRET`: Secreto de cliente de la API de CABA.
 
-| Variable | Descripción |
-|----------|-------------|
-| `TELEGRAM_TOKEN` | Token de tu bot de Telegram. |
-| `CABA_API_CLIENT_ID` | Client ID de la API de Transporte CABA. |
-| `CABA_API_CLIENT_SECRET` | Client Secret de la API de Transporte CABA. |
+## 🚀 Despliegue en Fly.io
+El proyecto incluye `Dockerfile`, `start.sh` y `fly.toml` listos para usar.
 
-## 🛠️ Arquitectura
-- **`build_db.py`**: Descarga el ZIP de GTFS CABA y lo convierte en una base de datos SQLite optimizada con índices.
-- **`bot.py`**: Lógica principal del bot (ConversationHandler, Geolocalización con Nominatim, Parsing de Protobuf y ETAs).
-- **`transporte.db`**: Base de datos local (generada) para cruzar rutas, paradas y recorridos.
+1. `fly auth login`
+2. `fly launch` (usar configuración existente)
+3. Configurar secretos:
+   ```bash
+   fly secrets set TELEGRAM_TOKEN=... CABA_API_CLIENT_ID=... CABA_API_CLIENT_SECRET=...
+   ```
+4. `fly deploy`
 
-## 🚀 Despliegue (Fly.io)
-El proyecto está optimizado para Fly.io. Asegúrate de:
-1. Tener instalado `flyctl`.
-2. Ejecutar `fly launch`.
-3. Configurar los secretos: `fly secrets set TELEGRAM_TOKEN=... CABA_API_CLIENT_ID=... CABA_API_CLIENT_SECRET=...`.
-4. El comando de inicio debe incluir la ejecución de `build_db.py` o asegurar que la DB esté presente.
+*Nota: La base de datos se reconstruye automáticamente en cada despliegue o reinicio para asegurar datos actualizados.*
 
 ## 📄 Licencia
 Este proyecto se distribuye bajo la licencia MIT.

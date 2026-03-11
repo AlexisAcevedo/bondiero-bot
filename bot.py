@@ -163,17 +163,25 @@ async def handle_line_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     if len(parts) > 1:
         address = parts[1]
         await update.message.reply_text(f"Buscando '{address}' en CABA...")
-        geolocator = Nominatim(user_agent="bondiero_bot_alexis")
+        # Usamos un User-Agent único y tiempo de espera de 10s para evitar bloqueos
+        geolocator = Nominatim(user_agent="bondiero_bot_alexis_prod_v2")
         try:
             # Fuerza a CABA
-            location = geolocator.geocode(f"{address}, Ciudad Autónoma de Buenos Aires, Argentina")
+            location = geolocator.geocode(
+                f"{address}, Ciudad Autónoma de Buenos Aires, Argentina", 
+                timeout=10
+            )
             if location:
                 return await process_location(update, context, location.latitude, location.longitude)
             else:
                 await update.message.reply_text("No encontré esa dirección en CABA. Enviame tu ubicación GPS.")
         except Exception as e:
-            logger.error(f"Error Geocoder: {e}")
-            await update.message.reply_text("Error al buscar dirección. Enviame tu ubicación GPS.")
+            if "malformed" in str(e):
+                logger.error(f"Error Crítico Base de Datos: {e}")
+                await update.message.reply_text("Error en la base de datos del servidor. Reintentando...")
+            else:
+                logger.error(f"Error Geocoder: {e}")
+                await update.message.reply_text("Error al buscar dirección. Enviame tu ubicación GPS.")
 
     await update.message.reply_text(
         f"¿Donde estas? Enviame tu ubicación para buscar las paradas del {line}.",
