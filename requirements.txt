@@ -3,6 +3,5 @@ aiohttp==3.11.12
 python-dotenv==1.0.1
 geopy==2.4.1
 requests==2.32.3
-pandas==2.2.3
 gtfs-realtime-bindings==2.0.0
 protobuf==7.34.0
