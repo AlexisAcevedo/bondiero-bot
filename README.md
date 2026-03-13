@@ -1,52 +1,156 @@
 # 🚌 Bondiero Bot
 
-Un bot de Telegram asíncrono diseñado para informar en tiempo real cuánto tiempo falta para que llegue el próximo colectivo en la Ciudad Autónoma de Buenos Aires (CABA). Optimizado para despliegue eficiente en entornos de bajos recursos (como el plan gratuito de Fly.io).
+Bot de Telegram asíncrono que informa en tiempo real cuánto falta para el próximo colectivo en CABA. Optimizado para entornos de bajos recursos (Fly.io free tier, 512MB RAM).
 
 ## 🚀 Inicio Rápido
 
-### Requisitos Previos
+### Requisitos
 - Python 3.11+
-- Tokens de la [API de Transporte de CABA](https://www.buenosaires.gob.ar/desarrollourbano/transporte/api-de-transporte) (Client ID y Client Secret).
-- Un Token de Bot de Telegram (vía @BotFather).
+- Tokens de la [API de Transporte de CABA](https://www.buenosaires.gob.ar/desarrollourbano/transporte/api-de-transporte) (Client ID y Secret)
+- Token de Bot de Telegram (vía [@BotFather](https://t.me/BotFather))
 
-### Instalación Local
-1. Clonar el repositorio.
-2. Crear un entorno virtual: `python -m venv venv`.
-3. Activar el entorno e instalar dependencias: `pip install -r requirements.txt`.
-4. Configurar el archivo `.env`.
+### Instalación
+```bash
+git clone https://github.com/AlexisAcevedo/bondiero-bot.git
+cd bondiero-bot
+python -m venv venv
+pip install -r requirements.txt
+```
 
-### Inicialización de Datos
-El bot requiere una base de datos SQLite con las paradas y rutas de CABA. Se genera automáticamente:
+### Configuración
+Crear archivo `.env`:
+```env
+TELEGRAM_TOKEN=tu_token_de_telegram
+CABA_API_CLIENT_ID=tu_client_id
+CABA_API_CLIENT_SECRET=tu_client_secret
+```
+
+### Generar Base de Datos
 ```bash
 python build_db.py
 ```
+Descarga el GTFS estático de CABA y crea `transporte.db` con paradas, rutas y viajes representativos.
 
-## ✨ Características y Optimizaciones
-- **Eficiencia de Memoria:** Procesamiento de GTFS mediante *streaming* (csv nativo) para funcionar en servidores con solo 512MB de RAM.
-- **Base de Datos Ultra-Slim:** Reducción de la base de datos de 2GB a ~5MB mediante la selección de viajes representativos, sin pérdida de funcionalidad de paradas.
-- **Geolocalización Robusta:** Integración con Nominatim (OpenStreetMap) configurada para evitar bloqueos en servidores de producción.
-- **Cálculo de ETA Inteligente:** Intenta calcular la ruta real vía OSRM y cuenta con un *fallback* automático por distancia lineal (18 km/h) si el servicio externo falla.
-- **Tiempo Real:** Conexión directa con el feed Protobuf de GTFS-Realtime de CABA.
+### Ejecutar
+```bash
+python bot.py
+```
 
-## ⚙️ Configuración
+## 💬 Uso en Telegram
 
-Crea un archivo `.env` con las siguientes variables:
-- `TELEGRAM_TOKEN`: Token de Telegram.
-- `CABA_API_CLIENT_ID`: ID de cliente de la API de CABA.
-- `CABA_API_CLIENT_SECRET`: Secreto de cliente de la API de CABA.
+| Comando | Ejemplo | Descripción |
+|---------|---------|-------------|
+| `/inicio` | `/start` | Mensaje de bienvenida |
+| `/<línea>` | `/152` | Consulta por ubicación GPS |
+| `/<línea> <dirección>` | `/132 rivadavia 4296` | Consulta por dirección en CABA |
+| `/cancel` | `/cancel` | Cancelar operación |
+
+### Ejemplo de Respuesta
+
+```
+🚌 Línea 132
+
+📍 Hacia A Retiro
+Parada: 4210 YRIGOYEN HIPOLITO AV. (0.1 km)
+⏱ Llegan en: 7 min, 14 min
+
+📍 Hacia A Cement. De Flores X Av. Carabobo
+Parada: 4121 RIVADAVIA AV. (0.2 km)
+📐 Estimado: 12 min, 18 min
+```
+
+- **⏱** = Tiempo real (fuente: `tripUpdates` de la API CABA)
+- **📐** = Estimado (calculado desde posiciones GPS de los colectivos)
+
+## 🏗️ Arquitectura
+
+### Motor de ETA (Cascading Fallback)
+
+```
+1. tripUpdates (real-time)     ← Predicciones del sistema AVL de cada empresa
+   └─ Geographic matching (500m) para resolver formato de stop_id
+2. vehiclePositions (fallback) ← Posiciones GPS de los colectivos
+   ├─ Filtrado por direction_id (evita duplicados entre ida/vuelta)
+   ├─ Deduplicación por vehicle.id
+   └─ ETA calculado por:
+       a) Velocidad reportada (speed / distancia)
+       b) OSRM routing (auto, como proxy)
+       c) Distancia lineal a 18 km/h
+```
+
+### Endpoints de la API de CABA Utilizados
+
+| Endpoint | Formato | Uso |
+|----------|---------|-----|
+| `/colectivos/tripUpdates` | Protobuf | ETA primario (arrival_time por parada) |
+| `/colectivos/vehiclePositions` | Protobuf | Fallback (lat/lon/speed de cada colectivo) |
+| `/colectivos/feed-gtfs` | ZIP | Datos estáticos (rutas, paradas, viajes) |
+
+### Base de Datos (`transporte.db`)
+
+Generada por `build_db.py` desde el GTFS estático. Solo guarda un viaje representativo por (ruta, dirección) para mantener el tamaño bajo (~100MB vs 2GB original).
+
+| Tabla | Contenido |
+|-------|-----------|
+| `routes` | Líneas de colectivo (route_id, short_name) |
+| `trips` | Un viaje por (ruta, dirección) con headsign |
+| `stops` | Paradas con coordenadas (lat, lon) |
+| `stop_times` | Secuencia de paradas por viaje |
+
+### Stack Técnico
+
+| Componente | Tecnología |
+|------------|------------|
+| Bot Framework | python-telegram-bot 21.10 |
+| HTTP Async | aiohttp |
+| Geocoding | geopy (Nominatim/OSM) |
+| GTFS-RT | gtfs-realtime-bindings (Protobuf) |
+| Base de Datos | SQLite |
+| ETA Routing | OSRM (fallback) |
+| Deploy | Docker → Fly.io (GRU, 512MB) |
+
+## ✨ Características
+
+- **ETA en Tiempo Real:** `tripUpdates` como fuente primaria con fallback inteligente
+- **Filtrado por Dirección:** Muestra colectivos de ida y vuelta por separado, sin duplicados
+- **Eficiencia de Memoria:** Procesamiento GTFS con streaming CSV para 512MB RAM
+- **Geolocalización Robusta:** Nominatim con geocoding restringido a CABA
+- **Matching Geográfico:** Resuelve diferencias de formato entre stop_ids de la DB y la API
 
 ## 🚀 Despliegue en Fly.io
-El proyecto incluye `Dockerfile`, `start.sh` y `fly.toml` listos para usar.
 
-1. `fly auth login`
-2. `fly launch` (usar configuración existente)
-3. Configurar secretos:
-   ```bash
-   fly secrets set TELEGRAM_TOKEN=... CABA_API_CLIENT_ID=... CABA_API_CLIENT_SECRET=...
-   ```
-4. `fly deploy`
+```bash
+fly auth login
+fly launch                    # usar configuración existente
+fly secrets set TELEGRAM_TOKEN=... CABA_API_CLIENT_ID=... CABA_API_CLIENT_SECRET=...
+fly deploy
+```
 
-*Nota: La base de datos se reconstruye automáticamente en cada despliegue o reinicio para asegurar datos actualizados.*
+La base de datos se reconstruye automáticamente en cada deploy (`start.sh` ejecuta `build_db.py` antes de `bot.py`).
+
+## 🧪 Tests
+
+```bash
+python test_eta.py            # Integration tests (requiere API keys y transporte.db)
+```
+
+Valida: helpers de ETA, matching geográfico de tripUpdates, filtrado por dirección de vehiclePositions, y flujo completo end-to-end.
+
+## 📁 Estructura del Proyecto
+
+```
+bondiero-bot/
+├── bot.py              # Bot principal + motor de ETA
+├── build_db.py         # Generador de base de datos GTFS
+├── test_eta.py         # Tests de integración
+├── requirements.txt    # Dependencias Python
+├── Dockerfile          # Imagen Docker
+├── fly.toml            # Configuración Fly.io
+├── start.sh            # Script de inicio (build_db + bot)
+├── .env.example        # Template de variables de entorno
+└── artifacts/          # Documentación de cambios
+```
 
 ## 📄 Licencia
-Este proyecto se distribuye bajo la licencia MIT.
+
+MIT
