@@ -53,14 +53,18 @@ python bot.py
 📍 Hacia A Retiro
 Parada: 4210 YRIGOYEN HIPOLITO AV. (0.1 km)
 ⏱ Llegan en: 7 min, 14 min
+_⚠️ Datos de hace 3 min_
 
 📍 Hacia A Cement. De Flores X Av. Carabobo
 Parada: 4121 RIVADAVIA AV. (0.2 km)
 📐 Estimado: 12 min, 18 min
+_⚠️ Unidades agrupadas — los tiempos pueden ser imprecisos_
 ```
 
 - **⏱** = Tiempo real (fuente: `tripUpdates` de la API CABA)
 - **📐** = Estimado (calculado desde posiciones GPS de los colectivos)
+- **⚠️ Datos** = Indicador de latencia (aparece solo si el feed de CABA está desactualizado > 90s)
+- **⚠️ Unidades agrupadas** = Advertencia de "Bus Bunching" (dos unidades juntas a menos de 300m)
 
 ## 🏗️ Arquitectura
 
@@ -68,14 +72,16 @@ Parada: 4121 RIVADAVIA AV. (0.2 km)
 
 ```
 1. tripUpdates (real-time)     ← Predicciones del sistema AVL de cada empresa
-   └─ Geographic matching (500m) para resolver formato de stop_id
+   ├─ Geographic matching (500m) para resolver formato de stop_id
+   └─ Expone la latencia del feed al usuario
 2. vehiclePositions (fallback) ← Posiciones GPS de los colectivos
    ├─ Filtrado por direction_id (evita duplicados entre ida/vuelta)
    ├─ Deduplicación por vehicle.id
+   ├─ Detección de Bus Bunching (< 300m entre unidades)
    └─ ETA calculado por:
        a) Velocidad reportada (speed / distancia)
        b) OSRM routing (auto, como proxy)
-       c) Distancia lineal a 18 km/h
+       c) Distancia lineal ajustada por franja horaria (pico/valle/noche)
 ```
 
 ### Endpoints de la API de CABA Utilizados
@@ -111,11 +117,12 @@ Generada por `build_db.py` desde el GTFS estático. Solo guarda un viaje represe
 
 ## ✨ Características
 
-- **ETA en Tiempo Real:** `tripUpdates` como fuente primaria con fallback inteligente
-- **Filtrado por Dirección:** Muestra colectivos de ida y vuelta por separado, sin duplicados
-- **Eficiencia de Memoria:** Procesamiento GTFS con streaming CSV para 512MB RAM
-- **Geolocalización Robusta:** Nominatim con geocoding restringido a CABA
-- **Matching Geográfico:** Resuelve diferencias de formato entre stop_ids de la DB y la API
+- **ETA Transparente:** Muestra la edad de los datos (latencia) para que el usuario sepa si puede confiar.
+- **Detección de Bus Bunching:** Advierte si dos colectivos vienen muy pegados (solo en modo fallback).
+- **Fallback Inteligente:** Estima la velocidad basado en la franja horaria (pico, valle, nocturno) y ruteos geométricos/OSRM.
+- **Filtrado por Dirección:** Muestra colectivos de ida y vuelta por separado, sin duplicados.
+- **Geolocalización Robusta:** Nominatim con geocoding restringido a CABA y matching geográfico para IDs incompatibles.
+- **Eficiencia de Memoria:** Procesamiento GTFS asíncrono diseñado para servidores de 512MB RAM.
 
 ## 🚀 Despliegue en Fly.io
 
